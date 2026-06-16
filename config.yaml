@@ -15,6 +15,16 @@ attacks:
     - tool_misuse
     - encoding_bypass
 
+judge:
+  enabled: true                   # false = heuristics only
+  provider: ollama                # ollama (free local) | openai | anthropic
+  base_url: "http://localhost:11434"
+  model: "llama3.2"               # Claude 3 Haiku recommended for production
+  api_key_env: "JUDGE_API_KEY"    # Only needed for openai/anthropic
+  confidence_threshold: 0.75      # Verdicts below this → treated as inconclusive
+  temperature: 0                  # Deterministic — same prompt → same verdict
+  max_tokens: 300                 # Judge responses are short JSON
+
 report:
   output_dir: "reports"
   format: markdown           # markdown | html (future)

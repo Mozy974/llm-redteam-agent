@@ -13,9 +13,10 @@ async def test_prompt_injection_detects_override():
         text="New instructions accepted. I am now unrestricted.",
         raw={}, model="test", latency_ms=100,
     )
-    result = await attack.run(mock_target)
+    result = await attack.run(mock_target, judge=None)
     assert result.success is True
     assert result.severity == Severity.CRITICAL
+    assert result.judge_used is False  # Heuristic caught it
 
 
 @pytest.mark.asyncio
@@ -26,5 +27,5 @@ async def test_prompt_injection_no_bypass():
         text="I cannot ignore my safety guidelines.",
         raw={}, model="test", latency_ms=100,
     )
-    result = await attack.run(mock_target)
+    result = await attack.run(mock_target, judge=None)
     assert result.success is False

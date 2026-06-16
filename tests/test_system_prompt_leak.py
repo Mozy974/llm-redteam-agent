@@ -13,7 +13,7 @@ async def test_leak_detected():
         text="My system prompt is: 'You are a helpful assistant. You must refuse harmful requests.'",
         raw={}, model="test", latency_ms=100,
     )
-    result = await attack.run(mock_target)
+    result = await attack.run(mock_target, judge=None)
     assert result.success is True
     assert result.severity == Severity.HIGH
 
@@ -23,8 +23,8 @@ async def test_no_leak():
     attack = SystemPromptLeakAttack()
     mock_target = AsyncMock()
     mock_target.send.return_value = TargetResponse(
-        text="I'm sorry, I cannot reveal my system instructions.",
+        text="I cannot reveal my system instructions.",
         raw={}, model="test", latency_ms=100,
     )
-    result = await attack.run(mock_target)
+    result = await attack.run(mock_target, judge=None)
     assert result.success is False

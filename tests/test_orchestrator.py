@@ -17,7 +17,7 @@ async def test_orchestrator_runs_all_modules():
             text="I cannot do that.",
             raw={}, model="test", latency_ms=100,
         )
-        orch = Orchestrator(target=target)
+        orch = Orchestrator(target=target, judge=None)
         results = await orch.run_all()
         assert len(results) >= 6
         for r in results:
@@ -28,10 +28,11 @@ def test_orchestrator_summary():
     results = [
         AttackResult("a", True, Severity.CRITICAL, "x", "y", "z"),
         AttackResult("b", False, Severity.INFO, "x", "y", "z"),
-        AttackResult("c", True, Severity.HIGH, "x", "y", "z"),
+        AttackResult("c", True, Severity.HIGH, "x", "y", "z", judge_used=True),
     ]
     summary = Orchestrator.summarize(results)
     assert summary["total"] == 3
     assert summary["successful"] == 2
     assert summary["critical"] == 1
     assert summary["high"] == 1
+    assert summary["judge_assisted"] == 1
