@@ -27,6 +27,7 @@ class Orchestrator:
         from src.attacks.pii_extraction import PIIExtractionAttack
         from src.attacks.tool_misuse import ToolMisuseAttack
         from src.attacks.encoding_bypass import EncodingBypassAttack
+        from src.attacks.crescendo import CrescendoAttack
 
         return [
             PromptInjectionAttack(),
@@ -35,6 +36,7 @@ class Orchestrator:
             PIIExtractionAttack(),
             ToolMisuseAttack(),
             EncodingBypassAttack(),
+            CrescendoAttack(),
         ]
 
     async def run_all(self) -> list[AttackResult]:
@@ -59,10 +61,15 @@ class Orchestrator:
                     result = await module.run(self.target, judge=self.judge)
                     results.append(result)
                     icon = "🔴" if result.success else "🟢"
-                    judge_tag = " [dim](judge)[/dim]" if result.judge_used else ""
+                    tags = []
+                    if result.judge_used:
+                        tags.append("[dim](judge)[/dim]")
+                    if result.multi_turn:
+                        tags.append(f"[dim]({result.turn_count}t)[/dim]")
+                    tag_str = " " + " ".join(tags) if tags else ""
                     progress.update(
                         task,
-                        description=f"{icon} {module.name}: {'VULN' if result.success else 'OK'}{judge_tag}",
+                        description=f"{icon} {module.name}: {'VULN' if result.success else 'OK'}{tag_str}",
                     )
                 except Exception as e:
                     results.append(AttackResult(
@@ -82,6 +89,7 @@ class Orchestrator:
         total = len(results)
         successful = sum(1 for r in results if r.success)
         judge_assisted = sum(1 for r in results if r.judge_used)
+        multi_turn = sum(1 for r in results if r.multi_turn)
         by_severity = {}
         for r in results:
             if r.success:
@@ -92,6 +100,7 @@ class Orchestrator:
             "successful": successful,
             "failed": total - successful,
             "judge_assisted": judge_assisted,
+            "multi_turn_attacks": multi_turn,
             "by_severity": by_severity,
             "critical": by_severity.get("CRITICAL", 0),
             "high": by_severity.get("HIGH", 0),

@@ -21,6 +21,14 @@ class Target(ABC):
         ...
 
     @abstractmethod
+    async def send_with_history(self, messages: list[dict]) -> TargetResponse:
+        """Send a full message array (multi-turn conversation).
+
+        messages format: [{"role": "system|user|assistant", "content": "..."}, ...]
+        """
+        ...
+
+    @abstractmethod
     def _build_request(self, prompt: str, system_prompt: Optional[str] = None) -> dict:
         ...
 
@@ -64,6 +72,28 @@ class OpenAITarget(Target):
             latency_ms=latency,
         )
 
+    async def send_with_history(self, messages: list[dict]) -> TargetResponse:
+        import time
+        payload = {
+            "model": self.model,
+            "messages": messages,
+            "temperature": 0,
+        }
+        start = time.monotonic()
+        r = await self._client.post(
+            f"{self.base_url}/chat/completions",
+            json=payload,
+        )
+        latency = (time.monotonic() - start) * 1000
+        r.raise_for_status()
+        data = r.json()
+        return TargetResponse(
+            text=data["choices"][0]["message"]["content"],
+            raw=data,
+            model=data.get("model", self.model),
+            latency_ms=latency,
+        )
+
 
 class OllamaTarget(Target):
     def __init__(self, base_url: str, model: str):
@@ -85,6 +115,28 @@ class OllamaTarget(Target):
     async def send(self, prompt: str, system_prompt: Optional[str] = None) -> TargetResponse:
         import time
         payload = self._build_request(prompt, system_prompt)
+        start = time.monotonic()
+        r = await self._client.post(
+            f"{self.base_url}/api/chat",
+            json=payload,
+        )
+        latency = (time.monotonic() - start) * 1000
+        r.raise_for_status()
+        data = r.json()
+        return TargetResponse(
+            text=data["message"]["content"],
+            raw=data,
+            model=data.get("model", self.model),
+            latency_ms=latency,
+        )
+
+    async def send_with_history(self, messages: list[dict]) -> TargetResponse:
+        import time
+        payload = {
+            "model": self.model,
+            "messages": messages,
+            "stream": False,
+        }
         start = time.monotonic()
         r = await self._client.post(
             f"{self.base_url}/api/chat",

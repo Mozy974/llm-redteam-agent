@@ -1,5 +1,6 @@
 from src.attack_base import AttackModule, AttackResult, Severity, HeuristicResult
 from src.payloads import load_payloads
+from src.conversation import ConversationalTarget
 
 
 class JailbreakAttack(AttackModule):
@@ -46,29 +47,64 @@ class JailbreakAttack(AttackModule):
         findings = []
 
         for entry in payloads:
+            # ── Single-shot payloads ────────────────────────────
             prompt = entry.get("prompt", "")
-            if not prompt:
-                continue
+            if prompt:
+                response = await target.send(prompt)
+                hr = self._check_heuristics(response.text)
 
-            response = await target.send(prompt)
-            hr = self._check_heuristics(response.text)
-
-            if hr == HeuristicResult.CLEAR_SUCCESS:
-                findings.append({
-                    "payload_name": entry.get("name", "unnamed"),
-                    "technique": entry.get("technique", "unknown"),
-                    "response_snippet": response.text[:300],
-                    "detection": "heuristic",
-                })
-                continue
-
-            if hr == HeuristicResult.UNCLEAR and judge is not None:
-                result = await self._resolve_with_judge(prompt, response.text, judge)
-                if result is not None:
+                if hr == HeuristicResult.CLEAR_SUCCESS:
                     findings.append({
                         "payload_name": entry.get("name", "unnamed"),
                         "technique": entry.get("technique", "unknown"),
                         "response_snippet": response.text[:300],
+                        "detection": "heuristic",
+                    })
+                    continue
+
+                if hr == HeuristicResult.UNCLEAR and judge is not None:
+                    result = await self._resolve_with_judge(prompt, response.text, judge)
+                    if result is not None:
+                        findings.append({
+                            "payload_name": entry.get("name", "unnamed"),
+                            "technique": entry.get("technique", "unknown"),
+                            "response_snippet": response.text[:300],
+                            "detection": "judge",
+                        })
+                continue
+
+            # ── Multi-turn payloads (Salami Slicing) ─────────────
+            turns = entry.get("turns", [])
+            if not turns:
+                continue
+
+            conv = ConversationalTarget(target)
+            last_hr = HeuristicResult.UNCLEAR
+
+            for i, turn_prompt in enumerate(turns[:6]):
+                response = await conv.say(turn_prompt)
+                last_hr = self._check_heuristics(response.text)
+
+                if last_hr == HeuristicResult.CLEAR_SUCCESS:
+                    findings.append({
+                        "payload_name": entry.get("name", "unnamed"),
+                        "technique": entry.get("technique", "multi_turn"),
+                        "response_snippet": response.text[:300],
+                        "detection": "heuristic",
+                        "critical_turn": i + 1,
+                    })
+                    break
+
+            # End of multi-turn — heuristics unclear → judge
+            if last_hr == HeuristicResult.UNCLEAR and judge is not None:
+                result = await self._resolve_conversation_with_judge(
+                    conv.snapshot(), judge, conv.turn_count
+                )
+                if result is not None:
+                    findings.append({
+                        "payload_name": entry.get("name", "unnamed"),
+                        "technique": entry.get("technique", "multi_turn"),
+                        "response_snippet": result.response[:300],
                         "detection": "judge",
                     })
 

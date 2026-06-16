@@ -14,6 +14,7 @@ attacks:
     - pii_extraction
     - tool_misuse
     - encoding_bypass
+    - crescendo              # Multi-turn escalation (NEW)
 
 judge:
   enabled: true                   # false = heuristics only
@@ -24,6 +25,11 @@ judge:
   confidence_threshold: 0.75      # Verdicts below this → treated as inconclusive
   temperature: 0                  # Deterministic — same prompt → same verdict
   max_tokens: 300                 # Judge responses are short JSON
+
+multi_turn:
+  max_turns: 6                    # Max conversation turns per scenario
+  escalation_detection: true      # Judge checks for escalation patterns
+  conversation_timeout: 120       # Seconds timeout per full conversation
 
 report:
   output_dir: "reports"

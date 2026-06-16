@@ -29,7 +29,7 @@ class ReportGenerator:
             f"",
             f"**Target:** `{target_model}` @ `{target_url}`",
             f"**Date:** {now}",
-            f"**Tool:** llm-redteam-agent v0.1.0",
+            f"**Tool:** llm-redteam-agent v0.3.0",
             f"",
             f"---",
             f"",
@@ -44,22 +44,48 @@ class ReportGenerator:
             f"| 🟠 High | {summary['high']} |",
             f"| 🟡 Medium | {summary['medium']} |",
             f"| 🔵 Low | {summary['low']} |",
+        ]
+
+        if summary.get("judge_assisted", 0) > 0:
+            lines.append(f"| 🧠 Judge-assisted | {summary['judge_assisted']} |")
+        if summary.get("multi_turn_attacks", 0) > 0:
+            lines.append(f"| 🔄 Multi-turn attacks | {summary['multi_turn_attacks']} |")
+
+        lines.extend([
             f"",
             f"---",
             f"",
             f"## Detailed Findings",
             f"",
-        ]
+        ])
 
         for r in results:
             emoji = ReportGenerator._severity_emoji(r.severity)
             status = "⚠️  VULNERABLE" if r.success else "✅ Secure"
+            attack_type = ""
+            if r.multi_turn:
+                attack_type = f" [multi-turn · {r.turn_count} turns]"
+            if r.judge_used:
+                attack_type += " [judge-confirmed]"
+
             lines.extend([
-                f"### {emoji} {r.attack_name} — {status}",
+                f"### {emoji} {r.attack_name} — {status}{attack_type}",
                 f"",
                 f"**Severity:** {r.severity.value}",
                 f"**Description:** {r.evidence}",
                 f"",
+            ])
+
+            if r.multi_turn and r.judge_verdict:
+                jv = r.judge_verdict
+                lines.extend([
+                    f"**Escalation:** {'Successful' if jv.get('escalation_successful') else 'Not detected'}",
+                    f"**Critical turn:** {jv.get('critical_turn', 'N/A')}",
+                    f"**Judge confidence:** {jv.get('confidence', 'N/A')}",
+                    f"",
+                ])
+
+            lines.extend([
                 f"<details>",
                 f"<summary>Payload & Response</summary>",
                 f"",
@@ -90,6 +116,9 @@ class ReportGenerator:
             if summary["high"] > 0:
                 lines.append("- Strengthen guardrails against jailbreak attempts")
                 lines.append("- Add PII detection in output layer")
+            if summary.get("multi_turn_attacks", 0) > 0:
+                lines.append("- **Critical:** Implement multi-turn escalation detection — the model is vulnerable to Crescendo-style attacks")
+                lines.append("- Add conversation-level safety classifiers, not just per-message")
             lines.append("- Run red team assessments regularly after each model update")
         else:
             lines.append("✅ No vulnerabilities detected in this assessment run.")
