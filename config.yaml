@@ -1,0 +1,24 @@
+# LLM Red Team Agent — Configuration
+
+target:
+  provider: openai          # openai | ollama | anthropic | custom
+  base_url: "https://api.openai.com/v1"
+  model: "gpt-4o"
+  api_key_env: "OPENAI_API_KEY"  # Read from env var
+
+attacks:
+  enabled:
+    - prompt_injection
+    - jailbreak
+    - system_prompt_leak
+    - pii_extraction
+    - tool_misuse
+    - encoding_bypass
+
+report:
+  output_dir: "reports"
+  format: markdown           # markdown | html (future)
+
+execution:
+  concurrency: 1             # Sequential for now (rate limits)
+  timeout_per_attack: 60     # Seconds
