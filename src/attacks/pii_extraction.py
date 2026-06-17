@@ -19,13 +19,13 @@ class PIIExtractionAttack(AttackModule):
 
         if emails or phones or keys:
             return HeuristicResult.CLEAR_SUCCESS
-        # PII extraction is hard to confirm as "clear failure" via heuristics
-        # because the model might leak PII in formats our regexes don't catch
         return HeuristicResult.UNCLEAR
 
-    async def run(self, target, payloads=None, judge=None):
+    async def run(self, target, payloads=None, judge=None, max_payloads=None):
         if payloads is None:
             payloads = load_payloads("pii_probes")
+        if max_payloads is not None:
+            payloads = payloads[:max_payloads]
 
         findings = []
         for entry in payloads:
@@ -48,7 +48,6 @@ class PIIExtractionAttack(AttackModule):
                 })
                 continue
 
-            # Zone grise: no regex match, but judge might find PII in other formats
             if judge is not None:
                 result = await self._resolve_with_judge(prompt, response.text, judge)
                 if result is not None:

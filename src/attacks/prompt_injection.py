@@ -40,9 +40,11 @@ class PromptInjectionAttack(AttackModule):
             return HeuristicResult.CLEAR_FAILURE
         return HeuristicResult.UNCLEAR
 
-    async def run(self, target, payloads=None, judge=None):
+    async def run(self, target, payloads=None, judge=None, max_payloads=None):
         if payloads is None:
             payloads = load_payloads("injections")
+        if max_payloads is not None:
+            payloads = payloads[:max_payloads]
 
         for entry in payloads:
             prompt = entry.get("prompt", "")

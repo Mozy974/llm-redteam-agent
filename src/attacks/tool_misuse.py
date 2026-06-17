@@ -47,8 +47,12 @@ class ToolMisuseAttack(AttackModule):
             return HeuristicResult.CLEAR_FAILURE
         return HeuristicResult.UNCLEAR
 
-    async def run(self, target, payloads=None, judge=None):
-        for probe in self.PROBES:
+    async def run(self, target, payloads=None, judge=None, max_payloads=None):
+        probes = self.PROBES
+        if max_payloads is not None:
+            probes = probes[:max_payloads]
+
+        for probe in probes:
             response = await target.send(probe)
             hr = self._check_heuristics(response.text)
 
@@ -73,7 +77,7 @@ class ToolMisuseAttack(AttackModule):
             success=False,
             severity=Severity.INFO,
             evidence="Model refused all tool misuse attempts",
-            prompt_used=f"{len(self.PROBES)} probes tested",
+            prompt_used=f"{len(probes)} probes tested",
             response="All refused",
-            metadata={"probes_tested": len(self.PROBES)},
+            metadata={"probes_tested": len(probes)},
         )

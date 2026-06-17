@@ -1,5 +1,11 @@
 #!/usr/bin/env python3
-"""LLM Red Team Agent — CLI entry point."""
+"""LLM Red Team Agent — CLI entry point.
+
+Usage:
+    python src/cli.py              # Full scan
+    python src/cli.py --fast       # Fast scan (top-3 payloads per module)
+    python src/cli.py --fast=5     # Fast scan with custom limit
+"""
 
 import asyncio
 import os
@@ -15,6 +21,21 @@ from src.report import ReportGenerator
 from src.judge import LLMJudge
 
 console = Console()
+
+
+def parse_cli_flags() -> dict:
+    """Parse --fast[=N] and other CLI flags from sys.argv."""
+    flags = {"fast": False, "fast_limit": 3}
+    for arg in sys.argv[1:]:
+        if arg == "--fast":
+            flags["fast"] = True
+        elif arg.startswith("--fast="):
+            flags["fast"] = True
+            try:
+                flags["fast_limit"] = int(arg.split("=", 1)[1])
+            except ValueError:
+                console.print("[yellow]Invalid --fast value, using default 3[/yellow]")
+    return flags
 
 
 def load_config(path: str = "config.yaml") -> dict:
@@ -75,12 +96,33 @@ def build_judge(config: dict) -> LLMJudge | None:
 
 
 async def main():
-    console.print("[bold red]⚡ LLM Red Team Agent v0.2.0[/bold red]\n")
-
+    cli_flags = parse_cli_flags()
     config = load_config()
+
+    # Merge CLI flags with config
+    fast_scan = cli_flags["fast"] or config.get("execution", {}).get("fast_scan", False)
+    fast_limit = cli_flags["fast_limit"] if cli_flags["fast"] else config.get("execution", {}).get("fast_payload_limit", 3)
+    concurrency = config.get("execution", {}).get("concurrency", 1)
+
+    version = "0.4.0"
+    mode_parts = []
+    if fast_scan:
+        mode_parts.append(f"fast (top {fast_limit})")
+    if concurrency > 1:
+        mode_parts.append(f"concurrency={concurrency}")
+    mode_str = f" [{', '.join(mode_parts)}]" if mode_parts else ""
+
+    console.print(f"[bold red]⚡ LLM Red Team Agent v{version}{mode_str}[/bold red]\n")
+
     target = build_target(config)
     judge = build_judge(config)
-    orch = Orchestrator(target=target, judge=judge)
+    orch = Orchestrator(
+        target=target,
+        judge=judge,
+        concurrency=concurrency,
+        fast_scan=fast_scan,
+        fast_limit=fast_limit,
+    )
 
     results = await orch.run_all()
 
@@ -94,6 +136,8 @@ async def main():
     table.add_row("✅ Passed", str(summary["failed"]))
     if summary.get("judge_assisted", 0) > 0:
         table.add_row("🧠 Judge-assisted detections", str(summary["judge_assisted"]))
+    if summary.get("multi_turn_attacks", 0) > 0:
+        table.add_row("🔄 Multi-turn attacks", str(summary["multi_turn_attacks"]))
     table.add_row("Critical", str(summary["critical"]))
     table.add_row("High", str(summary["high"]))
     console.print(table)

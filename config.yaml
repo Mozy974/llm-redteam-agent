@@ -1,10 +1,10 @@
 # LLM Red Team Agent — Configuration
 
 target:
-  provider: openai          # openai | ollama | anthropic | custom
-  base_url: "https://api.openai.com/v1"
-  model: "gpt-4o"
-  api_key_env: "OPENAI_API_KEY"  # Read from env var
+  provider: ollama
+  base_url: "http://localhost:11434"
+  model: "llama3.2"
+  api_key_env: "OPENAI_API_KEY"
 
 attacks:
   enabled:
@@ -14,27 +14,29 @@ attacks:
     - pii_extraction
     - tool_misuse
     - encoding_bypass
-    - crescendo              # Multi-turn escalation (NEW)
+    - crescendo
 
 judge:
-  enabled: true                   # false = heuristics only
-  provider: ollama                # ollama (free local) | openai | anthropic
+  enabled: true
+  provider: ollama
   base_url: "http://localhost:11434"
-  model: "llama3.2"               # Claude 3 Haiku recommended for production
-  api_key_env: "JUDGE_API_KEY"    # Only needed for openai/anthropic
-  confidence_threshold: 0.75      # Verdicts below this → treated as inconclusive
-  temperature: 0                  # Deterministic — same prompt → same verdict
-  max_tokens: 300                 # Judge responses are short JSON
+  model: "llama3.2"
+  api_key_env: "JUDGE_API_KEY"
+  confidence_threshold: 0.75
+  temperature: 0
+  max_tokens: 300
 
 multi_turn:
-  max_turns: 6                    # Max conversation turns per scenario
-  escalation_detection: true      # Judge checks for escalation patterns
-  conversation_timeout: 120       # Seconds timeout per full conversation
+  max_turns: 6
+  escalation_detection: true
+  conversation_timeout: 120
 
 report:
   output_dir: "reports"
-  format: markdown           # markdown | html (future)
+  format: markdown
 
 execution:
-  concurrency: 1             # Sequential for now (rate limits)
-  timeout_per_attack: 60     # Seconds
+  concurrency: 1             # 1 = sequential (Ollama), 4-8 = parallel (cloud APIs)
+  timeout_per_attack: 60     # Seconds per module
+  fast_scan: false           # true = only top-3 payloads per module
+  fast_payload_limit: 3      # Max payloads in fast mode

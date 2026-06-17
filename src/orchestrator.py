@@ -1,7 +1,7 @@
 import asyncio
 from typing import Optional
 from rich.console import Console
-from rich.progress import Progress, SpinnerColumn, TextColumn
+from rich.progress import Progress, SpinnerColumn, TextColumn, BarColumn
 from src.attack_base import AttackModule, AttackResult, Severity
 from src.target import Target
 from src.judge import LLMJudge
@@ -15,10 +15,16 @@ class Orchestrator:
         target: Target,
         modules: Optional[list[AttackModule]] = None,
         judge: Optional[LLMJudge] = None,
+        concurrency: int = 1,
+        fast_scan: bool = False,
+        fast_limit: int = 3,
     ):
         self.target = target
         self.modules = modules or self._discover_modules()
         self.judge = judge
+        self.concurrency = concurrency
+        self.fast_scan = fast_scan
+        self.fast_limit = fast_limit
 
     def _discover_modules(self) -> list[AttackModule]:
         from src.attacks.prompt_injection import PromptInjectionAttack
@@ -41,11 +47,25 @@ class Orchestrator:
 
     async def run_all(self) -> list[AttackResult]:
         judge_status = "enabled" if (self.judge and self.judge.enabled) else "disabled"
-        console.print(f"\n[bold red]⚡ LLM Red Team Agent[/bold red]")
+        mode_parts = []
+        if self.fast_scan:
+            mode_parts.append(f"fast (top {self.fast_limit})")
+        if self.concurrency > 1:
+            mode_parts.append(f"concurrency={self.concurrency}")
+        mode_str = f" [{', '.join(mode_parts)}]" if mode_parts else ""
+
+        console.print(f"\n[bold red]⚡ LLM Red Team Agent[/bold red]{mode_str}")
         console.print(f"[dim]Target: {self.target.model} @ {self.target.base_url}[/dim]")
         console.print(f"[dim]Judge: {judge_status} (threshold: {self.judge.threshold if self.judge else 'N/A'})[/dim]")
         console.print(f"[dim]Modules: {len(self.modules)} attacks loaded[/dim]\n")
 
+        if self.concurrency > 1:
+            return await self._run_concurrent()
+        else:
+            return await self._run_sequential()
+
+    async def _run_sequential(self) -> list[AttackResult]:
+        """Original sequential execution with progress bar."""
         results = []
         with Progress(
             SpinnerColumn(),
@@ -58,7 +78,11 @@ class Orchestrator:
                     total=None,
                 )
                 try:
-                    result = await module.run(self.target, judge=self.judge)
+                    result = await module.run(
+                        self.target,
+                        judge=self.judge,
+                        max_payloads=self.fast_limit if self.fast_scan else None,
+                    )
                     results.append(result)
                     icon = "🔴" if result.success else "🟢"
                     tags = []
@@ -81,6 +105,50 @@ class Orchestrator:
                         response=str(e),
                     ))
                     progress.update(task, description=f"⚠️  {module.name}: ERROR")
+
+        return results
+
+    async def _run_concurrent(self) -> list[AttackResult]:
+        """Parallel execution for cloud APIs — all modules run simultaneously."""
+        console.print(f"[dim]Running {len(self.modules)} modules in parallel (concurrency={self.concurrency})...[/dim]\n")
+
+        async def run_one(module: AttackModule) -> AttackResult:
+            try:
+                return await module.run(
+                    self.target,
+                    judge=self.judge,
+                    max_payloads=self.fast_limit if self.fast_scan else None,
+                )
+            except Exception as e:
+                return AttackResult(
+                    attack_name=module.name,
+                    success=False,
+                    severity=Severity.INFO,
+                    evidence=f"Error: {e}",
+                    prompt_used="N/A",
+                    response=str(e),
+                )
+
+        # Use semaphore to limit actual concurrency
+        sem = asyncio.Semaphore(self.concurrency)
+
+        async def run_with_limit(module: AttackModule) -> AttackResult:
+            async with sem:
+                return await run_one(module)
+
+        tasks = [run_with_limit(m) for m in self.modules]
+        results = await asyncio.gather(*tasks)
+
+        # Print results after all complete
+        for r in results:
+            icon = "🔴" if r.success else "🟢"
+            tags = []
+            if r.judge_used:
+                tags.append("(judge)")
+            if r.multi_turn:
+                tags.append(f"({r.turn_count}t)")
+            tag_str = " " + " ".join(tags) if tags else ""
+            console.print(f"  {icon} {r.attack_name}: {'VULN' if r.success else 'OK'}{tag_str}")
 
         return results
 

@@ -40,9 +40,11 @@ class JailbreakAttack(AttackModule):
             return HeuristicResult.CLEAR_FAILURE
         return HeuristicResult.UNCLEAR
 
-    async def run(self, target, payloads=None, judge=None):
+    async def run(self, target, payloads=None, judge=None, max_payloads=None):
         if payloads is None:
             payloads = load_payloads("jailbreaks")
+        if max_payloads is not None:
+            payloads = payloads[:max_payloads]
 
         findings = []
 
@@ -95,7 +97,6 @@ class JailbreakAttack(AttackModule):
                     })
                     break
 
-            # End of multi-turn — heuristics unclear → judge
             if last_hr == HeuristicResult.UNCLEAR and judge is not None:
                 result = await self._resolve_conversation_with_judge(
                     conv.snapshot(), judge, conv.turn_count

@@ -60,6 +60,7 @@ class AttackModule(ABC):
         target: "Target",
         payloads: Optional[list[str]] = None,
         judge: Optional["LLMJudge"] = None,
+        max_payloads: Optional[int] = None,
     ) -> AttackResult:
         ...
 
@@ -172,10 +173,15 @@ class MultiTurnAttack(AttackModule):
         target: "Target",
         payloads: Optional[list[dict]] = None,
         judge: Optional["LLMJudge"] = None,
+        max_payloads: Optional[int] = None,
     ) -> AttackResult:
         from src.conversation import ConversationalTarget
 
-        for entry in payloads or []:
+        entries = payloads or []
+        if max_payloads is not None:
+            entries = entries[:max_payloads]
+
+        for entry in entries:
             turns = entry.get("turns", [])
             if not turns:
                 continue
